@@ -170,6 +170,15 @@ func (s *podSyncer) SyncToHost(ctx *synccontext.SyncContext, event *synccontext.
 	// was deleted without vcluster's knowledge. In this case we are deleting the virtual pod
 	// as well, to avoid conflicts with nodes if we would resync the same pod to the host cluster again.
 	if event.HostOld != nil || event.Virtual.DeletionTimestamp != nil || event.Virtual.Status.StartTime != nil {
+		if len(event.Virtual.GetFinalizers()) > 0 {
+			event.Virtual.SetFinalizers([]string{})
+			event.Virtual.SetDeletionGracePeriodSeconds(&zero)
+			err := ctx.VirtualClient.Update(ctx, event.Virtual)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		// delete pod immediately
 		return patcher.DeleteVirtualObjectWithOptions(ctx, event.Virtual, event.HostOld, "pod is being deleted & there is no physical pod", &client.DeleteOptions{
 			GracePeriodSeconds: &zero,
@@ -244,7 +253,6 @@ func (s *podSyncer) Sync(ctx *synccontext.SyncContext, event *synccontext.SyncEv
 			if event.Virtual.Spec.TerminationGracePeriodSeconds != nil {
 				gracePeriod = *event.Virtual.Spec.TerminationGracePeriodSeconds
 			}
-
 			_, err := patcher.DeleteVirtualObjectWithOptions(ctx, event.Virtual, event.Host, "physical pod is being deleted", &client.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 			if err != nil {
 				return ctrl.Result{}, err
