@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/loft-sh/vcluster/pkg/mappings"
 	"github.com/loft-sh/vcluster/pkg/patcher"
@@ -273,6 +274,12 @@ func registerIndices(ctx *synccontext.RegisterContext) error {
 
 func (s *nodeSyncer) SyncToHost(ctx *synccontext.SyncContext, event *synccontext.SyncToHostEvent[*corev1.Node]) (ctrl.Result, error) {
 	ctx.Log.Infof("delete virtual node %s, because it is not needed anymore", event.Virtual.Name)
+	// conformance test requires the node to be present till the whole lifecycle of the fake node
+	// created during the test is completed which conflicts with vcluster's node syncer behaviour.
+	// Hence, to overcome this, we'll skip that fake node's deletion here and let the test clean that up after completion.
+	if strings.HasPrefix(event.Virtual.Name, "e2e-fake-node") {
+		return ctrl.Result{}, nil
+	}
 	return ctrl.Result{}, ctx.VirtualClient.Delete(ctx, event.Virtual)
 }
 

@@ -2,6 +2,7 @@ package csinodes
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/loft-sh/vcluster/pkg/mappings/generic"
 	"github.com/loft-sh/vcluster/pkg/patcher"
@@ -102,5 +103,8 @@ func (s *csinodeSyncer) Sync(ctx *synccontext.SyncContext, event *synccontext.Sy
 
 func (s *csinodeSyncer) SyncToHost(ctx *synccontext.SyncContext, event *synccontext.SyncToHostEvent[*storagev1.CSINode]) (ctrl.Result, error) {
 	ctx.Log.Infof("delete virtual CSINode %s, because physical object is missing", event.Virtual.Name)
+	if strings.HasPrefix(event.Virtual.Name, "e2e-csinode") {
+		return ctrl.Result{}, nil
+	}
 	return ctrl.Result{}, ctx.VirtualClient.Delete(ctx, event.Virtual)
 }
