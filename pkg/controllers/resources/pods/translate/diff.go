@@ -9,10 +9,26 @@ import (
 	"github.com/loft-sh/vcluster/pkg/util/translate"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (t *translator) Diff(ctx *synccontext.SyncContext, event *synccontext.SyncEvent[*corev1.Pod]) error {
+	// ignore the QOSClass field while updating pod status when there is a
+	// mismatch in this field value on vcluster and host. This field
+	// has become immutable from k8s 1.32 version and patch fails if
+	// syncer tries to update this field.
+	event.Host.Status.QOSClass = event.VirtualOld.Status.QOSClass
+
+	if event.Host.DeletionTimestamp != nil {
+		// Copy status updates from host to virtual if there is a status difference
+		if !equality.Semantic.DeepEqual(event.Virtual.Status, event.Host.Status) {
+			event.Virtual.Status = *event.Host.Status.DeepCopy()
+		}
+		// return since host is being deleted, no updates required
+		return nil
+	}
+
 	// sync conditions
 	event.Virtual.Status.Conditions, event.Host.Status.Conditions = patcher.CopyBidirectional(
 		event.VirtualOld.Status.Conditions,
@@ -25,6 +41,7 @@ func (t *translator) Diff(ctx *synccontext.SyncContext, event *synccontext.SyncE
 	vPod := event.Virtual
 	pPod := event.Host
 	vPod.Status = *pPod.Status.DeepCopy()
+
 	stripInjectedSidecarContainers(vPod, pPod)
 
 	// get Namespace resource in order to have access to its labels
